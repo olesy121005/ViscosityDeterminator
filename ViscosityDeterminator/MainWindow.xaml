@@ -1,12 +1,104 @@
 ﻿<Window x:Class="ViscosityDeterminator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ViscosityDeterminator"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Расчет вязкости шлака"
+        Width="1000"
+        Height="700"
+        MinWidth="800"
+        MinHeight="600"
+        Background="#F5F5F5">
 
-    </Grid>
+    <DockPanel>
+
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="База знаний">
+                <MenuItem Header="Добавить диаграмму"
+                          Click="AddDiagramMenuItem_Click"/>
+                <MenuItem Header="Просмотреть базу"
+                          Click="OpenKnowledgeBaseMenuItem_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <Grid>
+            <Border Width="420"
+                    Padding="30"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#F5F5F5">
+
+                <StackPanel>
+
+                    <TextBlock Text="Расчет вязкости шлака"
+                               FontSize="26"
+                               FontWeight="Bold"
+                               Foreground="#26384A"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,35"/>
+
+                    <TextBlock Text="CaO:"
+                               FontSize="16"
+                               Margin="0,0,0,7"/>
+
+                    <TextBox x:Name="CaOTextBox"
+                             Height="38"
+                             FontSize="16"
+                             Padding="8"
+                             Margin="0,0,0,20"/>
+
+                    <TextBlock Text="MgO:"
+                               FontSize="16"
+                               Margin="0,0,0,7"/>
+
+                    <TextBox x:Name="MgOTextBox"
+                             Height="38"
+                             FontSize="16"
+                             Padding="8"
+                             Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Al₂O₃:"
+                               FontSize="16"
+                               Margin="0,0,0,7"/>
+
+                    <TextBox x:Name="Al2O3TextBox"
+                             Height="38"
+                             FontSize="16"
+                             Padding="8"
+                             Margin="0,0,0,20"/>
+
+                    <TextBlock Text="SiO₂:"
+                               FontSize="16"
+                               Margin="0,0,0,7"/>
+
+                    <TextBox x:Name="SiO2TextBox"
+                             Height="38"
+                             FontSize="16"
+                             Padding="8"
+                             Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Температура (°C):"
+                               FontSize="16"
+                               Margin="0,0,0,7"/>
+
+                    <TextBox x:Name="TemperatureTextBox"
+                             Height="38"
+                             FontSize="16"
+                             Padding="8"
+                             Margin="0,0,0,35"/>
+
+                    <Button Content="РАССЧИТАТЬ ВЯЗКОСТЬ"
+                            Height="50"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Background="#4CAF50"
+                            BorderThickness="0"
+                            Click="CalculateViscosityButton_Click"/>
+
+                </StackPanel>
+
+            </Border>
+        </Grid>
+
+    </DockPanel>
+
 </Window>
