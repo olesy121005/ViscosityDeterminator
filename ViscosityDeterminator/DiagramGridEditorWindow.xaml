@@ -1,18 +1,22 @@
 ﻿<Window x:Class="ViscosityDeterminator.DiagramGridEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Редактор сетки диаграммы"
-        Width="1200"
-        Height="800"
-        MinWidth="1000"
-        MinHeight="650">
+        Title="Редактор сетки и изолиний"
+        Width="1500"
+        Height="900"
+        MinWidth="1100"
+        MinHeight="700"
+        WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
-    <Grid Margin="10">
+    <Grid Margin="12">
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="320"/>
+            <ColumnDefinition Width="15"/>
+            <ColumnDefinition Width="420"/>
         </Grid.ColumnDefinitions>
+
 
         <!-- ===================================================== -->
         <!-- ДИАГРАММА -->
@@ -21,106 +25,273 @@
         <Border Grid.Column="0"
                 BorderBrush="#BDBDBD"
                 BorderThickness="1"
-                Background="#EEEEEE"
-                Margin="0,0,10,0">
+                Background="#EEEEEE">
 
             <Grid>
 
-                <Image x:Name="DiagramImage"
-                       Stretch="Uniform"/>
+                <Viewbox x:Name="DiagramViewbox"
+                         Width="650"
+                         Height="650"
+                         Stretch="Uniform"
+                         StretchDirection="Both"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
 
-                <Canvas x:Name="DiagramCanvas"
-                        Background="Transparent"
-                        MouseLeftButtonDown="DiagramCanvas_MouseLeftButtonDown"/>
+                    <Grid x:Name="DiagramOverlay">
+
+                        <Image x:Name="DiagramImage"
+                               Stretch="Fill"/>
+
+                        <Canvas x:Name="DiagramCanvas"
+                                Background="Transparent"
+                                MouseLeftButtonDown="DiagramCanvas_MouseLeftButtonDown"
+                                MouseLeftButtonUp="DiagramCanvas_MouseLeftButtonUp"
+                                MouseMove="DiagramCanvas_MouseMove"/>
+
+                    </Grid>
+
+                </Viewbox>
 
             </Grid>
 
         </Border>
 
+
         <!-- ===================================================== -->
         <!-- ПРАВАЯ ПАНЕЛЬ -->
         <!-- ===================================================== -->
 
-        <Grid Grid.Column="1">
+        <Grid Grid.Column="2">
 
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0"
-                       Text="Редактор сетки"
-                       FontSize="24"
-                       FontWeight="Bold"
-                       Margin="0,0,0,20"/>
 
-            <!-- Компонент -->
+            <!-- ================================================= -->
+            <!-- ПАРАМЕТРЫ ДИАГРАММЫ -->
+            <!-- ================================================= -->
 
-            <StackPanel Grid.Row="1"
-                        Margin="0,0,0,10">
+            <Border Grid.Row="0"
+                    BorderBrush="#BDBDBD"
+                    BorderThickness="1"
+                    Padding="12">
 
-                <TextBlock Text="Компонент"
-                           Margin="0,0,0,5"/>
+                <StackPanel>
 
-                <ComboBox x:Name="ComponentComboBox"
-                          SelectedIndex="0">
+                    <TextBlock Text="Параметры диаграммы"
+                               FontSize="17"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,12"/>
 
-                    <ComboBoxItem Content="CaO"/>
-                    <ComboBoxItem Content="MgO"/>
-                    <ComboBoxItem Content="SiO2"/>
 
-                </ComboBox>
+                    <TextBlock Text="Название"
+                               Margin="0,0,0,4"/>
 
-            </StackPanel>
+                    <TextBox x:Name="DiagramNameTextBox"
+                             Height="32"
+                             Margin="0,0,0,10"/>
 
-            <!-- Значение -->
 
-            <StackPanel Grid.Row="2"
-                        Margin="0,0,0,10">
+                    <Grid>
 
-                <TextBlock Text="Значение"
-                           Margin="0,0,0,5"/>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                <TextBox x:Name="ValueTextBox"
-                         Height="32"/>
 
-                <Button Content="Изменить выбранную линию"
-                        Height="35"
-                        Margin="0,8,0,0"
-                        Click="UpdateLineButton_Click"/>
+                        <StackPanel Grid.Column="0">
 
-                <Button Content="Добавить линию вручную"
-                        Height="35"
-                        Margin="0,8,0,0"
-                        Click="AddManualLineButton_Click"/>
+                            <TextBlock Text="Al₂O₃ (%)"
+                                       Margin="0,0,0,4"/>
 
-            </StackPanel>
+                            <TextBox x:Name="Al2O3TextBox"
+                                     Height="32"/>
 
-            <!-- Список -->
+                        </StackPanel>
 
-            <ListBox x:Name="LinesListBox"
-                     Grid.Row="3"
-                     DisplayMemberPath="DisplayText"
-                     SelectionChanged="LinesListBox_SelectionChanged"/>
 
-            <!-- Нижние кнопки -->
+                        <StackPanel Grid.Column="2">
 
-            <StackPanel Grid.Row="4">
+                            <TextBlock Text="Температура (°C)"
+                                       Margin="0,0,0,4"/>
 
-                <Button Content="Удалить выбранную линию"
-                        Height="40"
-                        Margin="0,10,0,5"
-                        Click="DeleteLineButton_Click"/>
+                            <TextBox x:Name="TemperatureTextBox"
+                                     Height="32"/>
 
-                <Button Content="СОХРАНИТЬ СЕТКУ"
-                        Height="50"
-                        FontWeight="Bold"
-                        Click="SaveGridButton_Click"/>
+                        </StackPanel>
 
-            </StackPanel>
+                    </Grid>
+
+                </StackPanel>
+
+            </Border>
+
+
+            <!-- ================================================= -->
+            <!-- РЕДАКТОР -->
+            <!-- ================================================= -->
+
+            <TabControl Grid.Row="2">
+
+                <!-- ================================================= -->
+                <!-- СЕТКА -->
+                <!-- ================================================= -->
+
+                <TabItem Header="Сетка">
+
+                    <Grid Margin="10">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+
+                        <TextBlock Grid.Row="0"
+                                   Text="Компонент"
+                                   Margin="0,0,0,4"/>
+
+
+                        <ComboBox x:Name="ComponentComboBox"
+                                  Grid.Row="1"
+                                  Height="32">
+
+                            <ComboBoxItem Content="CaO"/>
+                            <ComboBoxItem Content="MgO"/>
+                            <ComboBoxItem Content="SiO2"/>
+
+                        </ComboBox>
+
+
+                        <StackPanel Grid.Row="2"
+                                    Margin="0,10,0,10">
+
+                            <TextBlock Text="Значение"
+                                       Margin="0,0,0,4"/>
+
+                            <TextBox x:Name="ValueTextBox"
+                                     Height="32"
+                                     Margin="0,0,0,8"/>
+
+
+                            <Button Content="ИЗМЕНИТЬ ЛИНИЮ"
+                                    Height="38"
+                                    Margin="0,0,0,8"
+                                    Click="UpdateLineButton_Click"/>
+
+
+                            <Button Content="ПОДТВЕРДИТЬ ЛИНИЮ"
+                                    Height="38"
+                                    Margin="0,0,0,8"
+                                    Click="VerifyLineButton_Click"/>
+
+
+                            <Button Content="ДОБАВИТЬ ЛИНИЮ ВРУЧНУЮ"
+                                    Height="38"
+                                    Click="AddManualLineButton_Click"/>
+
+                        </StackPanel>
+
+
+                        <ListBox x:Name="LinesListBox"
+                                 Grid.Row="3"
+                                 DisplayMemberPath="DisplayText"
+                                 SelectionChanged="LinesListBox_SelectionChanged"/>
+
+
+                        <Button Grid.Row="4"
+                                Content="УДАЛИТЬ ЛИНИЮ"
+                                Height="38"
+                                Margin="0,10,0,0"
+                                Click="DeleteLineButton_Click"/>
+
+                    </Grid>
+
+                </TabItem>
+
+
+                <!-- ================================================= -->
+                <!-- ИЗОЛИНИИ -->
+                <!-- ================================================= -->
+
+                <TabItem Header="Изолинии вязкости">
+
+                    <Grid Margin="10">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+
+                        <TextBlock Grid.Row="0"
+                                   Text="Вязкость, Па·с"
+                                   Margin="0,0,0,4"/>
+
+
+                        <TextBox x:Name="ViscosityTextBox"
+                                 Grid.Row="1"
+                                 Height="36"
+                                 Margin="0,0,0,10"/>
+
+
+                        <StackPanel Grid.Row="2">
+
+                            <Button Content="ПОДТВЕРДИТЬ ИЗОЛИНИЮ"
+                                    Height="38"
+                                    Margin="0,0,0,8"
+                                    Click="VerifyIsolineButton_Click"/>
+
+
+                            <Button Content="ДОБАВИТЬ ИЗОЛИНИЮ ВРУЧНУЮ"
+                                    Height="38"
+                                    Click="AddManualIsolineButton_Click"/>
+
+                        </StackPanel>
+
+
+                        <ListBox x:Name="IsolinesListBox"
+                                 Grid.Row="3"
+                                 Margin="0,10,0,0"
+                                 DisplayMemberPath="DisplayText"
+                                 SelectionChanged="IsolinesListBox_SelectionChanged"/>
+
+
+                        <Button Grid.Row="4"
+                                Content="УДАЛИТЬ ИЗОЛИНИЮ"
+                                Height="38"
+                                Margin="0,10,0,0"
+                                Click="DeleteIsolineButton_Click"/>
+
+                    </Grid>
+
+                </TabItem>
+
+            </TabControl>
+
+
+            <!-- ================================================= -->
+            <!-- СОХРАНЕНИЕ -->
+            <!-- ================================================= -->
+
+            <Button Grid.Row="3"
+                    Content="СОХРАНИТЬ ДИАГРАММУ, СЕТКУ И ИЗОЛИНИИ"
+                    Height="48"
+                    Margin="0,12,0,0"
+                    FontWeight="Bold"
+                    Click="SaveAllButton_Click"/>
 
         </Grid>
 

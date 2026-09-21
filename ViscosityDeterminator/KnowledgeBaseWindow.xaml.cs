@@ -30,8 +30,13 @@ namespace ViscosityDeterminator
         {
             try
             {
-                var diagrams = _diagramService.GetDiagrams();
-                DiagramsListBox.ItemsSource = diagrams;
+                var diagrams =
+                    _diagramService.GetDiagrams();
+
+                DiagramsListBox.ItemsSource =
+                    diagrams;
+
+                EditDiagramButton.IsEnabled = false;
             }
             catch (Exception ex)
             {
@@ -43,20 +48,31 @@ namespace ViscosityDeterminator
             }
         }
 
-        private void DiagramsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void DiagramsListBox_SelectionChanged(
+            object sender,
+            SelectionChangedEventArgs e)
         {
             if (DiagramsListBox.SelectedItem is not Diagram diagram)
+            {
+                EditDiagramButton.IsEnabled = false;
                 return;
+            }
+
+            EditDiagramButton.IsEnabled = true;
 
             DisplayDiagram(diagram);
         }
 
-        private void DisplayDiagram(Diagram diagram)
+        private void DisplayDiagram(
+            Diagram diagram)
         {
             try
             {
-                DiagramNameTextBlock.Text = diagram.Name;
-                DiagramTemperatureTextBlock.Text = $"{diagram.Temperature:F0} °C";
+                DiagramNameTextBlock.Text =
+                    diagram.Name;
+
+                DiagramTemperatureTextBlock.Text =
+                    $"{diagram.Temperature:F0} °C";
 
                 using var sourceImage =
                     Cv2.ImDecode(
@@ -69,6 +85,7 @@ namespace ViscosityDeterminator
                         "Ошибка загрузки изображения";
 
                     PreviewImage.Source = null;
+
                     PreviewPlaceholder.Visibility =
                         Visibility.Visible;
 
@@ -121,7 +138,84 @@ namespace ViscosityDeterminator
             }
         }
 
-        private BitmapImage ConvertMatToBitmapImage(Mat image)
+        private void EditDiagramButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (DiagramsListBox.SelectedItem is not Diagram diagram)
+            {
+                MessageBox.Show(
+                    "Сначала выберите диаграмму.",
+                    "Редактирование",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            try
+            {
+                using var image =
+                    Cv2.ImDecode(
+                        diagram.ImageData,
+                        ImreadModes.Color);
+
+                if (image.Empty())
+                {
+                    MessageBox.Show(
+                        "Не удалось загрузить изображение диаграммы.",
+                        "Ошибка",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+
+                    return;
+                }
+
+                var editor =
+                    new DiagramGridEditorWindow(
+                        diagram.Id,
+                        image.Clone());
+
+                editor.Owner = this;
+
+                editor.ShowDialog();
+
+                var updatedDiagram =
+                    _diagramService.GetDiagram(
+                        diagram.Id);
+
+                if (updatedDiagram != null)
+                {
+                    DiagramsListBox.ItemsSource = null;
+
+                    DiagramsListBox.ItemsSource =
+                        _diagramService.GetDiagrams();
+
+                    foreach (var item in DiagramsListBox.Items)
+                    {
+                        if (item is Diagram current &&
+                            current.Id == updatedDiagram.Id)
+                        {
+                            DiagramsListBox.SelectedItem =
+                                item;
+
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Ошибка открытия редактора диаграммы:\n\n{ex.Message}",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private BitmapImage ConvertMatToBitmapImage(
+            Mat image)
         {
             Cv2.ImEncode(
                 ".png",
@@ -135,11 +229,15 @@ namespace ViscosityDeterminator
                 new BitmapImage();
 
             bitmap.BeginInit();
+
             bitmap.CacheOption =
                 BitmapCacheOption.OnLoad;
+
             bitmap.StreamSource =
                 stream;
+
             bitmap.EndInit();
+
             bitmap.Freeze();
 
             return bitmap;

@@ -1,11 +1,9 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using OpenCvSharp;
 using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using Microsoft.Win32;
-using OpenCvSharp;
-using ViscosityDeterminator.Models;
 using ViscosityDeterminator.Services;
 
 namespace ViscosityDeterminator
@@ -14,81 +12,137 @@ namespace ViscosityDeterminator
     {
         private readonly DiagramService _diagramService;
         private readonly DiagramRecognitionService _recognitionService;
-
-        private string? _selectedFilePath;
+        private readonly DiagramViscosityIsolineRecognitionService _isolineRecognitionService;
 
         private Mat? _sourceImage;
+        private string? _sourceFilePath;
 
-        private GridRecognitionResult?
-            _recognitionResult;
+        private GridRecognitionResult? _recognitionResult;
+        private ViscosityIsolineRecognitionResult? _isolineRecognitionResult;
 
         public AddDiagramWindow()
         {
             InitializeComponent();
 
-            _diagramService =
-                new DiagramService();
-
-            _diagramService.InitializeDatabase();
-
-            _recognitionService =
-                new DiagramRecognitionService();
+            _diagramService = new DiagramService();
+            _recognitionService = new DiagramRecognitionService();
+            _isolineRecognitionService = new DiagramViscosityIsolineRecognitionService();
         }
 
-        private void SelectDiagramButton_Click(
-            object sender,
-            RoutedEventArgs e)
+        private void SelectDiagramButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog =
-                new OpenFileDialog
-                {
-                    Filter =
-                        "Изображения|*.png;*.jpg;*.jpeg;*.bmp|Все файлы|*.*"
-                };
+            var dialog = new OpenFileDialog
+            {
+                Title = "Выберите диаграмму",
+                Filter =
+                    "Изображения (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|" +
+                    "Все файлы (*.*)|*.*"
+            };
 
             if (dialog.ShowDialog() != true)
                 return;
 
             try
             {
+                _sourceFilePath = dialog.FileName;
+
                 _sourceImage?.Dispose();
+                _sourceImage = Cv2.ImRead(
+                    dialog.FileName,
+                    ImreadModes.Color);
 
-                _selectedFilePath =
-                    dialog.FileName;
+                if (_sourceImage.Empty())
+                {
+                    MessageBox.Show(
+                        "Не удалось открыть изображение.",
+                        "Ошибка",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
 
-                _sourceImage =
-                    _recognitionService.LoadImage(
-                        _selectedFilePath);
+                    _sourceImage.Dispose();
+                    _sourceImage = null;
+                    _sourceFilePath = null;
 
-                PreviewImage.Source =
-                    ConvertMatToBitmapImage(
-                        _sourceImage);
+                    return;
+                }
 
-                PreviewImage.Visibility =
-                    Visibility.Visible;
+                SelectedFileTextBlock.Text = dialog.FileName;
 
-                PreviewPlaceholder.Visibility =
-                    Visibility.Collapsed;
+                PreviewPlaceholder.Visibility = Visibility.Collapsed;
 
-                SelectedFileTextBlock.Text =
-                    _selectedFilePath;
+                ShowPreview(_sourceImage);
+
+                _recognitionResult = null;
+                _isolineRecognitionResult = null;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Ошибка загрузки изображения:\n\n{ex.Message}",
+                    $"Ошибка открытия изображения:\n{ex.Message}",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
         }
 
-        private void RecognizeGridButton_Click(
-            object sender,
-            RoutedEventArgs e)
+        private void RecognizeGridButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_sourceImage == null ||
-                _sourceImage.Empty())
+            if (_sourceImage == null || _sourceImage.Empty())
+            {
+                MessageBox.Show(
+                    "Сначала выберите изображение диаграммы.",
+                    "Распознавание",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            try
+            {
+                // Распознавание синей сетки
+                _recognitionResult =
+                    _recognitionService.FindGrid(_sourceImage);
+
+                // Распознавание зеленых изолиний вязкости
+                _isolineRecognitionResult =
+                    _isolineRecognitionService.FindIsolines(_sourceImage);
+
+                using var preview = _sourceImage.Clone();
+
+                // Отрисовываем найденную сетку
+                _recognitionService.DrawDetectedGrid(
+                    preview,
+                    _recognitionResult);
+
+                // Отрисовываем найденные изолинии
+                DrawRecognizedIsolines(
+                    preview,
+                    _isolineRecognitionResult);
+
+                ShowPreview(preview);
+
+                MessageBox.Show(
+                    $"Распознавание завершено.\n\n" +
+                    $"Линий сетки: {_recognitionResult.Lines.Count}\n" +
+                    $"Изолиний вязкости: {_isolineRecognitionResult.Isolines.Count}",
+                    "Результат распознавания",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Ошибка распознавания:\n{ex.Message}",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private void AddButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_sourceImage == null || _sourceImage.Empty())
             {
                 MessageBox.Show(
                     "Сначала выберите изображение диаграммы.",
@@ -99,48 +153,18 @@ namespace ViscosityDeterminator
                 return;
             }
 
-            try
-            {
-                _recognitionResult =
-                    _recognitionService.FindGrid(
-                        _sourceImage);
-
-                using var result =
-                    _recognitionService.DrawDetectedGrid(
-                        _sourceImage,
-                        _recognitionResult);
-
-                PreviewImage.Source =
-                    ConvertMatToBitmapImage(
-                        result);
-
-                MessageBox.Show(
-                    $"Распознано линий: " +
-                    $"{_recognitionResult.Lines.Count}\n\n" +
-                    "Теперь добавьте диаграмму, после чего " +
-                    "откроется редактор сетки.",
-                    "Распознавание завершено",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
+            if (string.IsNullOrWhiteSpace(_sourceFilePath))
             {
                 MessageBox.Show(
-                    $"Ошибка распознавания сетки:\n\n{ex.Message}",
+                    "Не найден путь к изображению диаграммы.",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+
+                return;
             }
-        }
 
-        private void AddButton_Click(
-            object sender,
-            RoutedEventArgs e)
-        {
-            string name =
-                NameTextBox.Text.Trim();
-
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(NameTextBox.Text))
             {
                 MessageBox.Show(
                     "Введите название диаграммы.",
@@ -148,23 +172,14 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
+                NameTextBox.Focus();
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(
-                    _selectedFilePath))
-            {
-                MessageBox.Show(
-                    "Сначала выберите файл диаграммы.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-
-                return;
-            }
-
-            if (!TryReadValue(
-                    Al2O3TextBox.Text,
+            if (!double.TryParse(
+                    Al2O3TextBox.Text.Replace(',', '.'),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
                     out double al2o3))
             {
                 MessageBox.Show(
@@ -173,11 +188,14 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
+                Al2O3TextBox.Focus();
                 return;
             }
 
-            if (!TryReadValue(
-                    TemperatureTextBox.Text,
+            if (!double.TryParse(
+                    TemperatureTextBox.Text.Replace(',', '.'),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
                     out double temperature))
             {
                 MessageBox.Show(
@@ -186,143 +204,106 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                return;
-            }
-
-            if (al2o3 != 5 &&
-                al2o3 != 10 &&
-                al2o3 != 15)
-            {
-                MessageBox.Show(
-                    "Al₂O₃ может быть только 5, 10 или 15 %.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-
-                return;
-            }
-
-            if (temperature != 1400 &&
-                temperature != 1450 &&
-                temperature != 1500)
-            {
-                MessageBox.Show(
-                    "Температура может быть только 1400, 1450 или 1500 °C.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-
+                TemperatureTextBox.Focus();
                 return;
             }
 
             try
             {
-                // Если сетку ещё не распознавали,
-                // распознаём автоматически.
-                if (_sourceImage == null ||
-                    _sourceImage.Empty())
-                {
-                    throw new InvalidOperationException(
-                        "Изображение диаграммы не загружено.");
-                }
-
+                // Если пользователь не запускал распознавание вручную,
+                // выполняем его автоматически перед открытием редактора.
                 if (_recognitionResult == null)
                 {
                     _recognitionResult =
-                        _recognitionService.FindGrid(
-                            _sourceImage);
+                        _recognitionService.FindGrid(_sourceImage);
                 }
 
-                // Сохраняем диаграмму.
-                _diagramService.AddDiagram(
-                    name,
+                if (_isolineRecognitionResult == null)
+                {
+                    _isolineRecognitionResult =
+                        _isolineRecognitionService.FindIsolines(_sourceImage);
+                }
+
+                // Сохраняем диаграмму через существующий DiagramService.
+                // Ему нужен путь к исходному файлу, а не OpenCvSharp.Mat.
+                var diagram = _diagramService.AddDiagram(
+                    NameTextBox.Text.Trim(),
                     al2o3,
                     temperature,
-                    _selectedFilePath);
+                    _sourceFilePath);
 
-                // Получаем добавленную диаграмму.
-                Diagram? diagram =
-                    _diagramService.FindDiagram(
-                        al2o3,
-                        temperature);
-
-                if (diagram == null)
-                {
-                    throw new InvalidOperationException(
-                        "Не удалось получить добавленную диаграмму.");
-                }
-
-                // Открываем редактор сетки.
-                var editor =
-                    new DiagramGridEditorWindow(
-                        diagram.Id,
-                        _sourceImage,
-                        _recognitionResult)
-                    {
-                        Owner = this
-                    };
+                // Открываем редактор сетки и изолиний.
+                var editor = new DiagramGridEditorWindow(
+                    diagram.Id,
+                    _sourceImage,
+                    _recognitionResult,
+                    _isolineRecognitionResult);
 
                 editor.ShowDialog();
 
-                DialogResult = true;
                 Close();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Ошибка при добавлении диаграммы:\n\n{ex.Message}",
+                    $"Ошибка добавления диаграммы:\n{ex.Message}",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
         }
 
-        private static bool TryReadValue(
-            string text,
-            out double value)
-        {
-            text =
-                text.Trim()
-                    .Replace(',', '.');
-
-            return double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out value);
-        }
-
-        private static BitmapImage
-            ConvertMatToBitmapImage(Mat image)
+        private void ShowPreview(Mat image)
         {
             Cv2.ImEncode(
                 ".png",
                 image,
-                out var buffer);
+                out byte[] bytes);
 
-            using var stream =
-                new MemoryStream(buffer);
+            var bitmap = new BitmapImage();
 
-            var bitmap =
-                new BitmapImage();
+            using var stream = new MemoryStream(bytes);
 
             bitmap.BeginInit();
-
-            bitmap.CacheOption =
-                BitmapCacheOption.OnLoad;
-
-            bitmap.StreamSource =
-                stream;
-
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
             bitmap.EndInit();
-
             bitmap.Freeze();
 
-            return bitmap;
+            PreviewImage.Source = bitmap;
         }
 
-        protected override void OnClosed(
-            EventArgs e)
+        private void DrawRecognizedIsolines(
+            Mat image,
+            ViscosityIsolineRecognitionResult result)
+        {
+            foreach (var isoline in result.Isolines)
+            {
+                var points = isoline.Points;
+
+                if (points.Count < 2)
+                    continue;
+
+                var cvPoints = points
+                    .Select(p =>
+                        new OpenCvSharp.Point(
+                            (int)(p.X * image.Width),
+                            (int)(p.Y * image.Height)))
+                    .ToArray();
+
+                if (cvPoints.Length < 2)
+                    continue;
+
+                Cv2.Polylines(
+                    image,
+                    new[] { cvPoints },
+                    false,
+                    new Scalar(0, 255, 0),
+                    3);
+            }
+        }
+
+        protected override void OnClosed(EventArgs e)
         {
             _sourceImage?.Dispose();
 
