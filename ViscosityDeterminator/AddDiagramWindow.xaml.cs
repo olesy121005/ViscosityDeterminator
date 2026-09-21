@@ -1,10 +1,11 @@
-﻿using Microsoft.Win32;
-using OpenCvSharp;
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using Microsoft.Win32;
+using OpenCvSharp;
+using ViscosityDeterminator.Models;
 using ViscosityDeterminator.Services;
 
 namespace ViscosityDeterminator
@@ -13,41 +14,47 @@ namespace ViscosityDeterminator
     {
         private readonly DiagramService _diagramService;
         private readonly DiagramRecognitionService _recognitionService;
+
         private string? _selectedFilePath;
+
         private Mat? _sourceImage;
+
+        private GridRecognitionResult?
+            _recognitionResult;
 
         public AddDiagramWindow()
         {
             InitializeComponent();
 
-            _diagramService = new DiagramService();
+            _diagramService =
+                new DiagramService();
+
             _diagramService.InitializeDatabase();
 
-            _recognitionService = new DiagramRecognitionService();
+            _recognitionService =
+                new DiagramRecognitionService();
         }
 
         private void SelectDiagramButton_Click(
             object sender,
             RoutedEventArgs e)
         {
-            var dialog = new OpenFileDialog
-            {
-                Title = "Выберите диаграмму",
-                Filter =
-                    "Изображения|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|" +
-                    "Все файлы|*.*"
-            };
+            var dialog =
+                new OpenFileDialog
+                {
+                    Filter =
+                        "Изображения|*.png;*.jpg;*.jpeg;*.bmp|Все файлы|*.*"
+                };
 
             if (dialog.ShowDialog() != true)
                 return;
 
             try
             {
+                _sourceImage?.Dispose();
+
                 _selectedFilePath =
                     dialog.FileName;
-
-                SelectedFileTextBlock.Text =
-                    _selectedFilePath;
 
                 _sourceImage =
                     _recognitionService.LoadImage(
@@ -57,26 +64,19 @@ namespace ViscosityDeterminator
                     ConvertMatToBitmapImage(
                         _sourceImage);
 
+                PreviewImage.Visibility =
+                    Visibility.Visible;
+
                 PreviewPlaceholder.Visibility =
                     Visibility.Collapsed;
+
+                SelectedFileTextBlock.Text =
+                    _selectedFilePath;
             }
             catch (Exception ex)
             {
-                _selectedFilePath = null;
-
-                _sourceImage?.Dispose();
-                _sourceImage = null;
-
-                PreviewImage.Source = null;
-
-                PreviewPlaceholder.Visibility =
-                    Visibility.Visible;
-
-                SelectedFileTextBlock.Text =
-                    string.Empty;
-
                 MessageBox.Show(
-                    $"Не удалось загрузить диаграмму:\n\n{ex.Message}",
+                    $"Ошибка загрузки изображения:\n\n{ex.Message}",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -91,8 +91,8 @@ namespace ViscosityDeterminator
                 _sourceImage.Empty())
             {
                 MessageBox.Show(
-                    "Сначала выберите диаграмму.",
-                    "Распознавание",
+                    "Сначала выберите изображение диаграммы.",
+                    "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
@@ -101,40 +101,32 @@ namespace ViscosityDeterminator
 
             try
             {
-                var grid =
+                _recognitionResult =
                     _recognitionService.FindGrid(
                         _sourceImage);
-
-                if (grid.Lines.Count == 0)
-                {
-                    MessageBox.Show(
-                        "Не удалось распознать координатную сетку.",
-                        "Распознавание",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-
-                    return;
-                }
 
                 using var result =
                     _recognitionService.DrawDetectedGrid(
                         _sourceImage,
-                        grid);
+                        _recognitionResult);
 
                 PreviewImage.Source =
                     ConvertMatToBitmapImage(
                         result);
 
                 MessageBox.Show(
-                    $"Распознано линий сетки: {grid.Lines.Count}",
-                    "Распознавание",
+                    $"Распознано линий: " +
+                    $"{_recognitionResult.Lines.Count}\n\n" +
+                    "Теперь добавьте диаграмму, после чего " +
+                    "откроется редактор сетки.",
+                    "Распознавание завершено",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Ошибка распознавания:\n\n{ex.Message}",
+                    $"Ошибка распознавания сетки:\n\n{ex.Message}",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -156,12 +148,22 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                NameTextBox.Focus();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    _selectedFilePath))
+            {
+                MessageBox.Show(
+                    "Сначала выберите файл диаграммы.",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
 
                 return;
             }
 
-            if (!TryParseNumber(
+            if (!TryReadValue(
                     Al2O3TextBox.Text,
                     out double al2o3))
             {
@@ -171,27 +173,10 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                Al2O3TextBox.Focus();
-
                 return;
             }
 
-            if (al2o3 != 5 &&
-                al2o3 != 10 &&
-                al2o3 != 15)
-            {
-                MessageBox.Show(
-                    "Содержание Al₂O₃ должно быть 5, 10 или 15 %.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-
-                Al2O3TextBox.Focus();
-
-                return;
-            }
-
-            if (!TryParseNumber(
+            if (!TryReadValue(
                     TemperatureTextBox.Text,
                     out double temperature))
             {
@@ -201,7 +186,18 @@ namespace ViscosityDeterminator
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                TemperatureTextBox.Focus();
+                return;
+            }
+
+            if (al2o3 != 5 &&
+                al2o3 != 10 &&
+                al2o3 != 15)
+            {
+                MessageBox.Show(
+                    "Al₂O₃ может быть только 5, 10 или 15 %.",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
 
                 return;
             }
@@ -211,23 +207,7 @@ namespace ViscosityDeterminator
                 temperature != 1500)
             {
                 MessageBox.Show(
-                    "Температура должна быть 1400, 1450 или 1500 °C.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-
-                TemperatureTextBox.Focus();
-
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(
-                    _selectedFilePath) ||
-                !File.Exists(
-                    _selectedFilePath))
-            {
-                MessageBox.Show(
-                    "Выберите файл диаграммы.",
+                    "Температура может быть только 1400, 1450 или 1500 °C.",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -237,17 +217,52 @@ namespace ViscosityDeterminator
 
             try
             {
+                // Если сетку ещё не распознавали,
+                // распознаём автоматически.
+                if (_sourceImage == null ||
+                    _sourceImage.Empty())
+                {
+                    throw new InvalidOperationException(
+                        "Изображение диаграммы не загружено.");
+                }
+
+                if (_recognitionResult == null)
+                {
+                    _recognitionResult =
+                        _recognitionService.FindGrid(
+                            _sourceImage);
+                }
+
+                // Сохраняем диаграмму.
                 _diagramService.AddDiagram(
                     name,
                     al2o3,
                     temperature,
                     _selectedFilePath);
 
-                MessageBox.Show(
-                    "Диаграмма успешно добавлена в базу знаний.",
-                    "Добавление диаграммы",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                // Получаем добавленную диаграмму.
+                Diagram? diagram =
+                    _diagramService.FindDiagram(
+                        al2o3,
+                        temperature);
+
+                if (diagram == null)
+                {
+                    throw new InvalidOperationException(
+                        "Не удалось получить добавленную диаграмму.");
+                }
+
+                // Открываем редактор сетки.
+                var editor =
+                    new DiagramGridEditorWindow(
+                        diagram.Id,
+                        _sourceImage,
+                        _recognitionResult)
+                    {
+                        Owner = this
+                    };
+
+                editor.ShowDialog();
 
                 DialogResult = true;
                 Close();
@@ -255,50 +270,30 @@ namespace ViscosityDeterminator
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Не удалось добавить диаграмму:\n\n{ex.Message}",
+                    $"Ошибка при добавлении диаграммы:\n\n{ex.Message}",
                     "Ошибка",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
         }
 
-        private void CancelButton_Click(
-            object sender,
-            RoutedEventArgs e)
-        {
-            Close();
-        }
-
-        private bool TryParseNumber(
+        private static bool TryReadValue(
             string text,
             out double value)
         {
-            text = text.Trim();
+            text =
+                text.Trim()
+                    .Replace(',', '.');
 
-            if (double.TryParse(
-                    text,
-                    NumberStyles.Float,
-                    CultureInfo.CurrentCulture,
-                    out value))
-            {
-                return true;
-            }
-
-            if (double.TryParse(
-                    text.Replace(',', '.'),
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out value))
-            {
-                return true;
-            }
-
-            value = 0;
-            return false;
+            return double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value);
         }
 
-        private BitmapImage ConvertMatToBitmapImage(
-            Mat image)
+        private static BitmapImage
+            ConvertMatToBitmapImage(Mat image)
         {
             Cv2.ImEncode(
                 ".png",
@@ -312,11 +307,15 @@ namespace ViscosityDeterminator
                 new BitmapImage();
 
             bitmap.BeginInit();
+
             bitmap.CacheOption =
                 BitmapCacheOption.OnLoad;
+
             bitmap.StreamSource =
                 stream;
+
             bitmap.EndInit();
+
             bitmap.Freeze();
 
             return bitmap;
@@ -326,6 +325,7 @@ namespace ViscosityDeterminator
             EventArgs e)
         {
             _sourceImage?.Dispose();
+
             base.OnClosed(e);
         }
     }

@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Windows;
 using OpenCvSharp;
+using ViscosityDeterminator.Data;
 using ViscosityDeterminator.Models;
 using ViscosityDeterminator.Services;
 
@@ -11,15 +12,22 @@ namespace ViscosityDeterminator
     {
         private readonly DiagramService _diagramService;
         private readonly DiagramPointService _pointService;
+        private readonly DiagramGridService _gridService;
 
         public MainWindow()
         {
             InitializeComponent();
 
+            // Работа с диаграммами
             _diagramService = new DiagramService();
             _diagramService.InitializeDatabase();
 
+            // Поиск точки состава
             _pointService = new DiagramPointService();
+
+            // Работа с сохранённой сеткой диаграмм
+            _gridService = new DiagramGridService(
+                new KnowledgeBaseContext());
         }
 
         private void AddDiagramMenuItem_Click(
@@ -50,35 +58,69 @@ namespace ViscosityDeterminator
             object sender,
             RoutedEventArgs e)
         {
+            // ---------------------------------------------------------
+            // Чтение CaO
+            // ---------------------------------------------------------
+
             if (!TryReadValue(
                     CaOTextBox.Text,
                     "CaO",
                     out double cao))
+            {
                 return;
+            }
+
+            // ---------------------------------------------------------
+            // Чтение MgO
+            // ---------------------------------------------------------
 
             if (!TryReadValue(
                     MgOTextBox.Text,
                     "MgO",
                     out double mgo))
+            {
                 return;
+            }
+
+            // ---------------------------------------------------------
+            // Чтение Al2O3
+            // ---------------------------------------------------------
 
             if (!TryReadValue(
                     Al2O3TextBox.Text,
                     "Al₂O₃",
                     out double al2o3))
+            {
                 return;
+            }
+
+            // ---------------------------------------------------------
+            // Чтение SiO2
+            // ---------------------------------------------------------
 
             if (!TryReadValue(
                     SiO2TextBox.Text,
                     "SiO₂",
                     out double sio2))
+            {
                 return;
+            }
+
+            // ---------------------------------------------------------
+            // Чтение температуры
+            // ---------------------------------------------------------
 
             if (!TryReadValue(
                     TemperatureTextBox.Text,
                     "Температура",
                     out double temperature))
+            {
                 return;
+            }
+
+            // ---------------------------------------------------------
+            // Проверка отрицательных значений
+            // ---------------------------------------------------------
 
             if (cao < 0 ||
                 mgo < 0 ||
@@ -93,6 +135,10 @@ namespace ViscosityDeterminator
 
                 return;
             }
+
+            // ---------------------------------------------------------
+            // Проверка суммы компонентов
+            // ---------------------------------------------------------
 
             double sum =
                 cao +
@@ -112,6 +158,10 @@ namespace ViscosityDeterminator
                 return;
             }
 
+            // ---------------------------------------------------------
+            // Проверка доступных диаграмм Al2O3
+            // ---------------------------------------------------------
+
             if (al2o3 != 5 &&
                 al2o3 != 10 &&
                 al2o3 != 15)
@@ -125,6 +175,10 @@ namespace ViscosityDeterminator
 
                 return;
             }
+
+            // ---------------------------------------------------------
+            // Проверка доступных температур
+            // ---------------------------------------------------------
 
             if (temperature != 1400 &&
                 temperature != 1450 &&
@@ -142,6 +196,10 @@ namespace ViscosityDeterminator
 
             try
             {
+                // -----------------------------------------------------
+                // Поиск нужной диаграммы
+                // -----------------------------------------------------
+
                 Diagram? diagram =
                     _diagramService.FindDiagram(
                         al2o3,
@@ -160,6 +218,10 @@ namespace ViscosityDeterminator
                     return;
                 }
 
+                // -----------------------------------------------------
+                // Загрузка изображения диаграммы
+                // -----------------------------------------------------
+
                 using var sourceImage =
                     Cv2.ImDecode(
                         diagram.ImageData,
@@ -176,34 +238,75 @@ namespace ViscosityDeterminator
                     return;
                 }
 
-                Point2f? point =
-    _pointService.FindPoint(
-        sourceImage,
-        cao,
-        mgo,
-        al2o3,
-        sio2);
+                // -----------------------------------------------------
+                // Получение сохранённой сетки
+                // -----------------------------------------------------
 
-                if (point == null)
+                var gridLines =
+                    _gridService.GetLines(diagram.Id);
+
+                if (gridLines.Count == 0)
                 {
                     MessageBox.Show(
-                        "Не удалось определить точку состава на диаграмме.",
-                        "Ошибка",
+                        "Для выбранной диаграммы не сохранена сетка.\n\n" +
+                        "Сначала необходимо открыть диаграмму в редакторе " +
+                        "сеткой и сохранить её.",
+                        "Сетка отсутствует",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
 
                     return;
                 }
 
+                // -----------------------------------------------------
+                // Поиск точки состава
+                //
+                // Используется уже сохранённая сетка.
+                // OpenCV здесь повторно сетку НЕ ищет.
+                // -----------------------------------------------------
+
+                Point2f? point =
+                    _pointService.FindPoint(
+                        sourceImage,
+                        gridLines,
+                        cao,
+                        mgo,
+                        sio2);
+
+                if (point == null)
+                {
+                    MessageBox.Show(
+                        "Не удалось определить точку состава на диаграмме.\n\n" +
+                        "Проверьте, что для данной диаграммы сохранены " +
+                        "линии CaO, MgO и SiO₂ с необходимыми значениями.",
+                        "Ошибка определения точки",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+
+                    return;
+                }
+
+                // -----------------------------------------------------
+                // Отрисовка найденной точки
+                // -----------------------------------------------------
+
                 using var resultImage =
                     _pointService.DrawPoint(
                         sourceImage,
                         point.Value);
 
+                // -----------------------------------------------------
+                // Преобразование изображения в PNG
+                // -----------------------------------------------------
+
                 Cv2.ImEncode(
                     ".png",
                     resultImage,
                     out var resultData);
+
+                // -----------------------------------------------------
+                // Открытие окна результата
+                // -----------------------------------------------------
 
                 var resultWindow =
                     new ViscosityResultWindow(
@@ -229,6 +332,10 @@ namespace ViscosityDeterminator
             }
         }
 
+        // =============================================================
+        // Чтение числового значения
+        // =============================================================
+
         private bool TryReadValue(
             string text,
             string fieldName,
@@ -236,6 +343,7 @@ namespace ViscosityDeterminator
         {
             text = text.Trim();
 
+            // Попытка чтения с текущей культурой Windows
             if (double.TryParse(
                     text,
                     NumberStyles.Float,
@@ -245,6 +353,7 @@ namespace ViscosityDeterminator
                 return true;
             }
 
+            // Попытка чтения с точкой
             if (double.TryParse(
                     text.Replace(',', '.'),
                     NumberStyles.Float,
@@ -255,7 +364,8 @@ namespace ViscosityDeterminator
             }
 
             MessageBox.Show(
-                $"Введите корректное числовое значение для поля «{fieldName}».",
+                $"Введите корректное числовое значение " +
+                $"для поля «{fieldName}».",
                 "Ошибка ввода",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);

@@ -10,6 +10,8 @@ namespace ViscosityDeterminator.Data
     {
         public DbSet<Diagram> Diagrams => Set<Diagram>();
 
+        public DbSet<DiagramGridLine> DiagramGridLines { get; set; }
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseSqlite("Data Source=knowledge_base.db");
